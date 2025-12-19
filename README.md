@@ -23,6 +23,10 @@ Users submit the following predictions.
 
 Team predictions score 2x points to encourage higher-risk, higher-reward picks. 
 
+Chaser remains editable until race start, allowing players to react to info such as weather, penalties, or strategic expectations before locking their final call.
+
+Players may go **Full Send** on one prediction. If correct, double points are awarded; Selections lock at race start.
+
 ---
 
 ## Points system - tentative
