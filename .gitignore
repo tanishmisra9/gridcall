@@ -22,8 +22,15 @@ dist/
 build/
 out/
 
+# Cache
+/fastf1cache
+
+# Local
+data/
+
 # Logs
 *.log
+*.txt
 
 # Git
 .gitconfig
