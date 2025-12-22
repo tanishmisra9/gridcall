@@ -14,16 +14,10 @@ if len(sys.argv) < 2 or len(sys.argv) > 4:
     print("Usage:")
     print("  python3 race_results.py <year> <round> [s|m]   - Get specific race")
     print("  python3 race_results.py <year> [s|m]           - Get all races for the year")
-    print("  python3 race_results.py <year>                  - Get all races (main + sprint)")
+    print("  python3 race_results.py <year>                 - Get all races (main + sprint)")
     print("\nFlags:")
     print("  s - Sprint race(s)")
     print("  m - Main race(s)")
-    print("\nExamples:")
-    print("  python3 race_results.py 2025 2 s    - Get sprint race for round 2")
-    print("  python3 race_results.py 2025 2      - Get main race for round 2")
-    print("  python3 race_results.py 2025 s      - Get all sprint races for 2025")
-    print("  python3 race_results.py 2025 m      - Get all main races for 2025")
-    print("  python3 race_results.py 2025        - Get all races for 2025")
     sys.exit(1)
 
 # Get year and round from command line arguments
@@ -68,7 +62,7 @@ def process_round(year, round_number, race_type='main', main_dir=".", sprint_dir
         print(f"Loading {session_name} data for {year}, Round {round_number}...")
         session.load()
         
-        results_df = session.results[columns_to_keep]
+        results_df = session.results.reset_index(drop=True).loc[:, columns_to_keep].copy()
         
         # Save to CSV
         results_df.to_csv(output_file, index=False)

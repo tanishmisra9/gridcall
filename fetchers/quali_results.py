@@ -17,10 +17,6 @@ if len(sys.argv) < 2 or len(sys.argv) > 4:
     print("\nFlags:")
     print("  s - Sprint qualifying")
     print("  m - Main qualifying (default)")
-    print("\nExamples:")
-    print("  python3 quali_results.py 2025 2 s    - Get sprint qualifying for round 2")
-    print("  python3 quali_results.py 2025 2      - Get main qualifying for round 2")
-    print("  python3 quali_results.py 2025        - Get all qualifyings for 2025")
     sys.exit(1)
 
 year = int(sys.argv[1])
