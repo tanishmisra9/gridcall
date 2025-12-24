@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, login as apiLogin, register as apiRegister, getCurrentUser } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 interface AuthContextType {
   user: User | null;
@@ -10,14 +10,19 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Routes that don't require authentication
+const PUBLIC_ROUTES = ['/login', '/register'];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     // Check if user is logged in on mount
@@ -26,8 +31,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadUser();
     } else {
       setLoading(false);
+      // Redirect to login if not on a public route
+      if (!PUBLIC_ROUTES.includes(pathname)) {
+        router.push('/login');
+      }
     }
   }, []);
+
+  // Handle route changes - redirect if not authenticated
+  useEffect(() => {
+    if (!loading && !user && !PUBLIC_ROUTES.includes(pathname)) {
+      router.push('/login');
+    }
+    // Redirect away from login/register if already authenticated
+    if (!loading && user && PUBLIC_ROUTES.includes(pathname)) {
+      router.push('/');
+    }
+  }, [loading, user, pathname, router]);
 
   const loadUser = async () => {
     try {
@@ -36,6 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       localStorage.removeItem('token');
       setUser(null);
+      // Redirect to login on auth failure
+      if (!PUBLIC_ROUTES.includes(pathname)) {
+        router.push('/login');
+      }
     } finally {
       setLoading(false);
     }
@@ -62,7 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      login, 
+      register, 
+      logout,
+      isAuthenticated: !!user 
+    }}>
       {children}
     </AuthContext.Provider>
   );

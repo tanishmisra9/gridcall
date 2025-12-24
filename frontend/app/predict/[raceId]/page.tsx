@@ -1,19 +1,18 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import PredictionForm from '@/components/PredictionForm';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import PredictionForm from '@/components/PredictionForm';
 
-export default function PredictPage() {
+function PredictContent() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const raceId = parseInt(params.raceId as string);
-  
-  // TODO: Get from auth - for now use test user ID
-  const userId = 1;
 
   const handleSuccess = () => {
-    alert('Predictions submitted successfully!');
     router.push(`/predictions/${raceId}`);
   };
 
@@ -26,10 +25,18 @@ export default function PredictPage() {
         <h1 className="text-3xl font-bold mb-6 text-black">Make Your Predictions</h1>
         <PredictionForm 
           raceId={raceId} 
-          userId={userId}
+          userId={user?.id || 0}
           onSuccess={handleSuccess}
         />
       </div>
     </div>
+  );
+}
+
+export default function PredictPage() {
+  return (
+    <ProtectedRoute>
+      <PredictContent />
+    </ProtectedRoute>
   );
 }

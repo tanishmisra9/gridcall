@@ -13,12 +13,32 @@ const api = axios.create({
 
 // Add token to requests if it exists
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   return config;
 });
+
+// Handle 401 errors globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        // Redirect to login if not already there
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+          window.location.href = '/login';
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Types
 export interface User {
@@ -70,6 +90,14 @@ export interface UserPrediction extends Prediction {
   scored: boolean;
 }
 
+export interface Grid {
+  id: number;
+  name: string;
+  invite_code: string;
+  created_by: number;
+  member_count: number;
+}
+
 // Auth Functions
 export const register = async (username: string, email: string, password: string): Promise<AuthResponse> => {
   const response = await api.post('/api/users/register', { username, email, password });
@@ -118,6 +146,22 @@ export const getMyPrediction = async (raceId: number): Promise<UserPrediction> =
 
 export const getRacePredictions = async (raceId: number): Promise<UserPrediction[]> => {
   const response = await api.get(`/api/predictions/race/${raceId}`);
+  return response.data;
+};
+
+// Grids
+export const createGrid = async (name: string): Promise<Grid> => {
+  const response = await api.post('/api/grids/', { name });
+  return response.data;
+};
+
+export const joinGrid = async (inviteCode: string): Promise<Grid> => {
+  const response = await api.post(`/api/grids/${inviteCode}/join`);
+  return response.data;
+};
+
+export const getMyGrids = async (): Promise<Grid[]> => {
+  const response = await api.get('/api/grids/my');
   return response.data;
 };
 

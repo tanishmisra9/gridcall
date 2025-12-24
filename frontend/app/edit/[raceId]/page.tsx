@@ -1,64 +1,66 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getUserPrediction, updatePrediction, Prediction, UserPrediction } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import { getMyPrediction, updatePrediction, UserPrediction, Prediction } from '@/lib/api';
 import Link from 'next/link';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
+// F1 2025 drivers list
 const DRIVERS = [
   'VER', 'PER', 'HAM', 'RUS', 'LEC', 'SAI', 'NOR', 'PIA',
-  'ALO', 'STR', 'OCO', 'GAS', 'TSU', 'RIC', 'ALB', 'SAR',
-  'MAG', 'HUL', 'BOT', 'ZHO'
+  'ALO', 'STR', 'OCO', 'GAS', 'TSU', 'LAW', 'ALB', 'SAR',
+  'BOT', 'ZHO', 'MAG', 'HUL', 'BEA', 'HAD', 'ANT', 'DOO'
 ];
 
 const TEAMS = [
-  'Red Bull Racing', 'Mercedes', 'Ferrari', 'McLaren',
-  'Aston Martin', 'Alpine', 'Williams', 'Kick Sauber',
-  'RB', 'Haas F1 Team'
+  'Red Bull', 'Mercedes', 'Ferrari', 'McLaren', 'Aston Martin',
+  'Alpine', 'RB', 'Williams', 'Sauber', 'Haas'
 ];
 
-export default function EditPredictionPage() {
+const FULL_SEND_CATEGORIES = [
+  'pole_driver',
+  'podium_p1',
+  'podium_p2',
+  'podium_p3',
+  'breakout',
+  'bust'
+];
+
+function EditContent() {
   const params = useParams();
   const router = useRouter();
   const raceId = parseInt(params.raceId as string);
-  const userId = 1; // TODO: Get from auth
-
+  
   const [existingPrediction, setExistingPrediction] = useState<UserPrediction | null>(null);
-  const [prediction, setPrediction] = useState<Partial<Prediction>>({
-    race_id: raceId,
-    breakout_type: 'driver',
-    bust_type: 'driver',
-  });
-  const [fullSend, setFullSend] = useState<string>('');
+  const [formData, setFormData] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadExistingPrediction();
-  }, []);
+    loadPrediction();
+  }, [raceId]);
 
-  const loadExistingPrediction = async () => {
+  const loadPrediction = async () => {
     try {
-      const existing = await getUserPrediction(userId, raceId);
-      setExistingPrediction(existing);
-      
-      // Pre-fill the form
-      setPrediction({
+      const prediction = await getMyPrediction(raceId);
+      setExistingPrediction(prediction);
+      setFormData({
         race_id: raceId,
-        pole_driver: existing.pole_driver,
-        podium_p1: existing.podium_p1,
-        podium_p2: existing.podium_p2,
-        podium_p3: existing.podium_p3,
-        chaser_driver: existing.chaser_driver,
-        breakout_type: existing.breakout_type,
-        breakout_name: existing.breakout_name,
-        bust_type: existing.bust_type,
-        bust_name: existing.bust_name,
+        pole_driver: prediction.pole_driver,
+        podium_p1: prediction.podium_p1,
+        podium_p2: prediction.podium_p2,
+        podium_p3: prediction.podium_p3,
+        chaser_driver: prediction.chaser_driver || '',
+        breakout_type: prediction.breakout_type,
+        breakout_name: prediction.breakout_name,
+        bust_type: prediction.bust_type,
+        bust_name: prediction.bust_name,
+        full_send_category: prediction.full_send_category || '',
       });
-      setFullSend(existing.full_send_category || '');
     } catch (err: any) {
-      setError('Failed to load existing predictions');
+      setError('No existing predictions found');
     } finally {
       setLoading(false);
     }
@@ -66,26 +68,13 @@ export default function EditPredictionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!existingPrediction || !formData) return;
+
     setSubmitting(true);
     setError('');
 
     try {
-      if (!prediction.pole_driver || !prediction.podium_p1 || 
-          !prediction.podium_p2 || !prediction.podium_p3) {
-        throw new Error('Please fill in all objective predictions');
-      }
-
-      if (!prediction.breakout_name || !prediction.bust_name) {
-        throw new Error('Please fill in breakout and bust predictions');
-      }
-
-      const finalPrediction: Prediction = {
-        ...prediction as Prediction,
-        full_send_category: fullSend || undefined,
-      };
-
-      await updatePrediction(existingPrediction!.id, finalPrediction, userId);
-      alert('Predictions updated successfully!');
+      await updatePrediction(existingPrediction.id, formData);
       router.push(`/predictions/${raceId}`);
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to update prediction');
@@ -94,19 +83,27 @@ export default function EditPredictionPage() {
     }
   };
 
+  const updateField = (field: keyof Prediction, value: string) => {
+    if (!formData) return;
+    setFormData(prev => prev ? { ...prev, [field]: value } : null);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading predictions...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-xl text-gray-600">Loading predictions...</p>
+        </div>
       </div>
     );
   }
 
-  if (!existingPrediction) {
+  if (!existingPrediction || !formData) {
     return (
-      <div className="min-h-screen p-8">
+      <div className="min-h-screen p-8 bg-gray-50">
         <div className="max-w-2xl mx-auto">
-          <p className="text-gray-600 mb-4">No existing predictions found.</p>
+          <p className="text-gray-600 mb-4">{error || 'No existing predictions found.'}</p>
           <Link href="/" className="text-blue-600 hover:underline">← Back to home</Link>
         </div>
       </div>
@@ -135,151 +132,167 @@ export default function EditPredictionPage() {
             <div>
               <label className="block text-sm font-medium mb-1 text-black">Pole Position</label>
               <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.pole_driver || ''}
-                onChange={(e) => setPrediction({ ...prediction, pole_driver: e.target.value })}
+                value={formData.pole_driver}
+                onChange={(e) => updateField('pole_driver', e.target.value)}
+                className="w-full p-3 border rounded text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
                 <option value="">Select driver</option>
-                {DRIVERS.map(driver => (
-                  <option key={driver} value={driver}>{driver}</option>
+                {DRIVERS.map(d => (
+                  <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1 text-black">Podium P1</label>
-              <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.podium_p1 || ''}
-                onChange={(e) => setPrediction({ ...prediction, podium_p1: e.target.value })}
-                required
-              >
-                <option value="">Select driver</option>
-                {DRIVERS.map(driver => (
-                  <option key={driver} value={driver}>{driver}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-black">P1</label>
+                <select
+                  value={formData.podium_p1}
+                  onChange={(e) => updateField('podium_p1', e.target.value)}
+                  className="w-full p-3 border rounded text-black"
+                  required
+                >
+                  <option value="">Select</option>
+                  {DRIVERS.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 text-black">P2</label>
+                <select
+                  value={formData.podium_p2}
+                  onChange={(e) => updateField('podium_p2', e.target.value)}
+                  className="w-full p-3 border rounded text-black"
+                  required
+                >
+                  <option value="">Select</option>
+                  {DRIVERS.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 text-black">P3</label>
+                <select
+                  value={formData.podium_p3}
+                  onChange={(e) => updateField('podium_p3', e.target.value)}
+                  className="w-full p-3 border rounded text-black"
+                  required
+                >
+                  <option value="">Select</option>
+                  {DRIVERS.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1 text-black">Podium P2</label>
+              <label className="block text-sm font-medium mb-1 text-black">Chaser (Fastest Lap)</label>
               <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.podium_p2 || ''}
-                onChange={(e) => setPrediction({ ...prediction, podium_p2: e.target.value })}
-                required
-              >
-                <option value="">Select driver</option>
-                {DRIVERS.map(driver => (
-                  <option key={driver} value={driver}>{driver}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1 text-black">Podium P3</label>
-              <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.podium_p3 || ''}
-                onChange={(e) => setPrediction({ ...prediction, podium_p3: e.target.value })}
-                required
-              >
-                <option value="">Select driver</option>
-                {DRIVERS.map(driver => (
-                  <option key={driver} value={driver}>{driver}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1 text-black">Chaser (Most Positions Gained)</label>
-              <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.chaser_driver || ''}
-                onChange={(e) => setPrediction({ ...prediction, chaser_driver: e.target.value })}
+                value={formData.chaser_driver}
+                onChange={(e) => updateField('chaser_driver', e.target.value)}
+                className="w-full p-3 border rounded text-black"
               >
                 <option value="">Select driver (optional)</option>
-                {DRIVERS.map(driver => (
-                  <option key={driver} value={driver}>{driver}</option>
+                {DRIVERS.map(d => (
+                  <option key={d} value={d}>{d}</option>
                 ))}
               </select>
             </div>
           </div>
 
           {/* Subjective Predictions */}
-          <div className="space-y-4">
+          <div className="space-y-4 pt-4 border-t">
             <h3 className="text-xl font-semibold text-black">Subjective Predictions</h3>
-            
+
             <div>
-              <label className="block text-sm font-medium mb-1 text-black">Breakout</label>
-              <div className="flex gap-4 mb-2">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="breakout_type"
-                    value="driver"
-                    checked={prediction.breakout_type === 'driver'}
-                    onChange={(e) => setPrediction({ ...prediction, breakout_type: 'driver', breakout_name: '' })}
-                  />
-                  <span className="ml-2 text-black">Driver (1pt)</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="breakout_type"
-                    value="team"
-                    checked={prediction.breakout_type === 'team'}
-                    onChange={(e) => setPrediction({ ...prediction, breakout_type: 'team', breakout_name: '' })}
-                  />
-                  <span className="ml-2 text-black">Team (2pt)</span>
-                </label>
+              <label className="block text-sm font-medium mb-1 text-black">Breakout Pick</label>
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField('breakout_type', 'driver');
+                    updateField('breakout_name', '');
+                  }}
+                  className={`px-4 py-2 rounded ${
+                    formData.breakout_type === 'driver' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-black'
+                  }`}
+                >
+                  Driver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField('breakout_type', 'team');
+                    updateField('breakout_name', '');
+                  }}
+                  className={`px-4 py-2 rounded ${
+                    formData.breakout_type === 'team' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-black'
+                  }`}
+                >
+                  Team
+                </button>
               </div>
               <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.breakout_name || ''}
-                onChange={(e) => setPrediction({ ...prediction, breakout_name: e.target.value })}
+                value={formData.breakout_name}
+                onChange={(e) => updateField('breakout_name', e.target.value)}
+                className="w-full p-3 border rounded text-black"
                 required
               >
-                <option value="">Select {prediction.breakout_type}</option>
-                {(prediction.breakout_type === 'driver' ? DRIVERS : TEAMS).map(item => (
+                <option value="">Select {formData.breakout_type}</option>
+                {(formData.breakout_type === 'driver' ? DRIVERS : TEAMS).map(item => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1 text-black">Bust</label>
-              <div className="flex gap-4 mb-2">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="bust_type"
-                    value="driver"
-                    checked={prediction.bust_type === 'driver'}
-                    onChange={(e) => setPrediction({ ...prediction, bust_type: 'driver', bust_name: '' })}
-                  />
-                  <span className="ml-2 text-black">Driver (1pt)</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="bust_type"
-                    value="team"
-                    checked={prediction.bust_type === 'team'}
-                    onChange={(e) => setPrediction({ ...prediction, bust_type: 'team', bust_name: '' })}
-                  />
-                  <span className="ml-2 text-black">Team (2pt)</span>
-                </label>
+              <label className="block text-sm font-medium mb-1 text-black">Bust Pick</label>
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField('bust_type', 'driver');
+                    updateField('bust_name', '');
+                  }}
+                  className={`px-4 py-2 rounded ${
+                    formData.bust_type === 'driver' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-black'
+                  }`}
+                >
+                  Driver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField('bust_type', 'team');
+                    updateField('bust_name', '');
+                  }}
+                  className={`px-4 py-2 rounded ${
+                    formData.bust_type === 'team' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-black'
+                  }`}
+                >
+                  Team
+                </button>
               </div>
               <select
-                className="w-full p-2 border rounded text-black"
-                value={prediction.bust_name || ''}
-                onChange={(e) => setPrediction({ ...prediction, bust_name: e.target.value })}
+                value={formData.bust_name}
+                onChange={(e) => updateField('bust_name', e.target.value)}
+                className="w-full p-3 border rounded text-black"
                 required
               >
-                <option value="">Select {prediction.bust_type}</option>
-                {(prediction.bust_type === 'driver' ? DRIVERS : TEAMS).map(item => (
+                <option value="">Select {formData.bust_type}</option>
+                {(formData.bust_type === 'driver' ? DRIVERS : TEAMS).map(item => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
@@ -287,31 +300,39 @@ export default function EditPredictionPage() {
           </div>
 
           {/* Full Send */}
-          <div>
-            <label className="block text-sm font-medium mb-1 text-black">Full Send (Optional - Double Points)</label>
+          <div className="space-y-4 pt-4 border-t">
+            <h3 className="text-xl font-semibold text-black">Full Send (Double Points)</h3>
             <select
-              className="w-full p-2 border rounded text-black"
-              value={fullSend}
-              onChange={(e) => setFullSend(e.target.value)}
+              value={formData.full_send_category}
+              onChange={(e) => updateField('full_send_category', e.target.value)}
+              className="w-full p-3 border rounded text-black"
             >
-              <option value="">None</option>
-              <option value="pole">Pole Position</option>
-              <option value="podium">Podium</option>
-              <option value="chaser">Chaser</option>
-              <option value="breakout">Breakout</option>
-              <option value="bust">Bust</option>
+              <option value="">None (optional)</option>
+              {FULL_SEND_CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>
+                  {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </option>
+              ))}
             </select>
           </div>
 
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
           >
             {submitting ? 'Updating...' : 'Update Predictions'}
           </button>
         </form>
       </div>
     </div>
+  );
+}
+
+export default function EditPage() {
+  return (
+    <ProtectedRoute>
+      <EditContent />
+    </ProtectedRoute>
   );
 }

@@ -10,6 +10,7 @@ import secrets
 
 from database.connection import get_db
 from models.database import Grid, User
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -26,10 +27,11 @@ class GridResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 @router.post("/", response_model=GridResponse)
 async def create_grid(
     grid: GridCreate,
-    user_id: int,  # TODO: Get from auth token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Create a new grid"""
@@ -40,14 +42,12 @@ async def create_grid(
     db_grid = Grid(
         name=grid.name,
         invite_code=invite_code,
-        created_by=user_id
+        created_by=current_user.id
     )
     db.add(db_grid)
     
     # Add creator as member
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        db_grid.members.append(user)
+    db_grid.members.append(current_user)
     
     db.commit()
     db.refresh(db_grid)
@@ -60,10 +60,11 @@ async def create_grid(
         member_count=len(db_grid.members)
     )
 
-@router.post("/{invite_code}/join")
+
+@router.post("/{invite_code}/join", response_model=GridResponse)
 async def join_grid(
     invite_code: str,
-    user_id: int,  # TODO: Get from auth token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Join a grid using invite code"""
@@ -72,34 +73,59 @@ async def join_grid(
     if not grid:
         raise HTTPException(status_code=404, detail="Grid not found")
     
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if user in grid.members:
+    # Check if already a member
+    if current_user in grid.members:
         raise HTTPException(status_code=400, detail="Already a member of this grid")
     
-    grid.members.append(user)
+    grid.members.append(current_user)
     db.commit()
+    db.refresh(grid)
     
-    return {"message": "Successfully joined grid", "grid_name": grid.name}
+    return GridResponse(
+        id=grid.id,
+        name=grid.name,
+        invite_code=grid.invite_code,
+        created_by=grid.created_by,
+        member_count=len(grid.members)
+    )
 
-@router.get("/user/{user_id}")
-async def get_user_grids(user_id: int, db: Session = Depends(get_db)):
-    """Get all grids a user is part of"""
+
+@router.get("/my", response_model=List[GridResponse])
+async def get_my_grids(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all grids the current user belongs to"""
     
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    grids = current_user.grids
     
-    grids = []
-    for grid in user.grids:
-        grids.append(GridResponse(
+    return [
+        GridResponse(
             id=grid.id,
             name=grid.name,
             invite_code=grid.invite_code,
             created_by=grid.created_by,
             member_count=len(grid.members)
-        ))
+        )
+        for grid in grids
+    ]
+
+
+@router.get("/{grid_id}", response_model=GridResponse)
+async def get_grid(
+    grid_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get grid details by ID"""
     
-    return grids
+    grid = db.query(Grid).filter(Grid.id == grid_id).first()
+    if not grid:
+        raise HTTPException(status_code=404, detail="Grid not found")
+    
+    return GridResponse(
+        id=grid.id,
+        name=grid.name,
+        invite_code=grid.invite_code,
+        created_by=grid.created_by,
+        member_count=len(grid.members)
+    )

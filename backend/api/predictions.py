@@ -4,9 +4,9 @@ API endpoints for prediction management
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import datetime
 from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
 
 from database.connection import get_db
 from models.database import Prediction, Race, User
@@ -14,7 +14,6 @@ from auth import get_current_user
 
 router = APIRouter()
 
-# Pydantic models
 class PredictionCreate(BaseModel):
     race_id: int
     pole_driver: str
@@ -24,15 +23,13 @@ class PredictionCreate(BaseModel):
     chaser_driver: Optional[str] = None
     breakout_type: str  # 'driver' or 'team'
     breakout_name: str
-    bust_type: str
+    bust_type: str  # 'driver' or 'team'
     bust_name: str
     full_send_category: Optional[str] = None
 
-class PredictionUpdate(BaseModel):
-    chaser_driver: str  # Only chaser can be updated after initial submission
-
 class PredictionResponse(BaseModel):
     id: int
+    user_id: int
     race_id: int
     pole_driver: str
     podium_p1: str
@@ -44,43 +41,43 @@ class PredictionResponse(BaseModel):
     bust_type: str
     bust_name: str
     full_send_category: Optional[str]
-    submitted_at: datetime
-    locked_at: Optional[datetime]
     points_earned: float
     scored: bool
+    submitted_at: datetime
     
     class Config:
         from_attributes = True
 
+
 @router.post("/", response_model=PredictionResponse)
-async def submit_prediction(
+async def create_prediction(
     prediction: PredictionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Submit predictions for a race"""
+    """Create a new prediction for a race"""
     
-    # Check if race exists and predictions are still open
+    # Check if race exists
     race = db.query(Race).filter(Race.id == prediction.race_id).first()
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     
+    # Check if predictions are still open
     if datetime.utcnow() > race.predictions_close:
         raise HTTPException(status_code=400, detail="Predictions are closed for this race")
     
-    # Check if user already has predictions for this race
+    # Check if user already has a prediction for this race
     existing = db.query(Prediction).filter(
-        Prediction.user_id == current_user.id, 
+        Prediction.user_id == current_user.id,
         Prediction.race_id == prediction.race_id
     ).first()
-    
     if existing:
-        raise HTTPException(status_code=400, detail="Predictions already submitted. Use update endpoint to modify.")
+        raise HTTPException(status_code=400, detail="You already have a prediction for this race. Use PUT to update.")
     
     # Create prediction
     db_prediction = Prediction(
         user_id=current_user.id,
-        **prediction.dict()
+        **prediction.model_dump()
     )
     db.add(db_prediction)
     db.commit()
@@ -88,70 +85,38 @@ async def submit_prediction(
     
     return db_prediction
 
-@router.put("/{prediction_id}/chaser", response_model=PredictionResponse)
-async def update_chaser(
-    prediction_id: int,
-    update: PredictionUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update chaser prediction (allowed until race start)"""
-    
-    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
-    if not prediction:
-        raise HTTPException(status_code=404, detail="Prediction not found")
-    
-    if prediction.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # Check if race has started
-    race = db.query(Race).filter(Race.id == prediction.race_id).first()
-    if datetime.utcnow() > race.race_date:
-        raise HTTPException(status_code=400, detail="Race has started, cannot update chaser")
-    
-    prediction.chaser_driver = update.chaser_driver
-    db.commit()
-    db.refresh(prediction)
-    
-    return prediction
 
 @router.put("/{prediction_id}", response_model=PredictionResponse)
 async def update_prediction(
     prediction_id: int,
-    update: PredictionCreate,
+    prediction: PredictionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update an existing prediction (allowed until predictions close)"""
+    """Update an existing prediction"""
     
-    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
-    if not prediction:
+    db_prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not db_prediction:
         raise HTTPException(status_code=404, detail="Prediction not found")
     
-    if prediction.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    if db_prediction.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your prediction")
     
     # Check if predictions are still open
-    race = db.query(Race).filter(Race.id == prediction.race_id).first()
+    race = db.query(Race).filter(Race.id == db_prediction.race_id).first()
     if datetime.utcnow() > race.predictions_close:
         raise HTTPException(status_code=400, detail="Predictions are closed for this race")
     
-    # Update all fields
-    prediction.pole_driver = update.pole_driver
-    prediction.podium_p1 = update.podium_p1
-    prediction.podium_p2 = update.podium_p2
-    prediction.podium_p3 = update.podium_p3
-    prediction.chaser_driver = update.chaser_driver
-    prediction.breakout_type = update.breakout_type
-    prediction.breakout_name = update.breakout_name
-    prediction.bust_type = update.bust_type
-    prediction.bust_name = update.bust_name
-    prediction.full_send_category = update.full_send_category
+    # Update fields
+    for key, value in prediction.model_dump().items():
+        if key != 'race_id':  # Don't allow changing race
+            setattr(db_prediction, key, value)
     
     db.commit()
-    db.refresh(prediction)
+    db.refresh(db_prediction)
     
-    return prediction
+    return db_prediction
+
 
 @router.get("/user/me/race/{race_id}", response_model=PredictionResponse)
 async def get_my_prediction(
@@ -159,32 +124,39 @@ async def get_my_prediction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get current user's predictions for a specific race"""
-    
+    """Get current user's prediction for a specific race"""
     prediction = db.query(Prediction).filter(
         Prediction.user_id == current_user.id,
         Prediction.race_id == race_id
     ).first()
     
     if not prediction:
-        raise HTTPException(status_code=404, detail="Prediction not found")
+        raise HTTPException(status_code=404, detail="No prediction found")
     
     return prediction
 
-@router.get("/race/{race_id}")
+
+@router.get("/race/{race_id}", response_model=List[PredictionResponse])
 async def get_race_predictions(
     race_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get all predictions for a race (after predictions close)"""
+    """Get all predictions for a race (for leaderboard)"""
+    predictions = db.query(Prediction).filter(
+        Prediction.race_id == race_id
+    ).all()
     
-    race = db.query(Race).filter(Race.id == race_id).first()
-    if not race:
-        raise HTTPException(status_code=404, detail="Race not found")
+    return predictions
+
+
+@router.get("/user/{user_id}", response_model=List[PredictionResponse])
+async def get_user_predictions(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get all predictions for a user"""
+    predictions = db.query(Prediction).filter(
+        Prediction.user_id == user_id
+    ).order_by(Prediction.submitted_at.desc()).all()
     
-    # Only show predictions after they close
-    if datetime.utcnow() < race.predictions_close:
-        raise HTTPException(status_code=400, detail="Predictions still open")
-    
-    predictions = db.query(Prediction).filter(Prediction.race_id == race_id).all()
     return predictions

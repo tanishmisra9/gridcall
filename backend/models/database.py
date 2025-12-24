@@ -82,15 +82,13 @@ class Prediction(Base):
     bust_type = Column(String)  # 'driver' or 'team'
     bust_name = Column(String)
     
-    # Full send
-    full_send_category = Column(String)  # Which prediction to double
-    
-    submitted_at = Column(DateTime, default=datetime.utcnow)
-    locked_at = Column(DateTime)  # When predictions were locked
+    # Full Send feature
+    full_send_category = Column(String)  # Which category to double points
     
     # Scoring
-    points_earned = Column(Float, default=0.0)
+    points_earned = Column(Float, default=0)
     scored = Column(Boolean, default=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="predictions")
@@ -103,21 +101,18 @@ class RaceResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     race_id = Column(Integer, ForeignKey('races.id'), nullable=False)
     
-    # Objective results
+    # Actual results
     pole_driver = Column(String)
     podium_p1 = Column(String)
     podium_p2 = Column(String)
     podium_p3 = Column(String)
-    chaser_driver = Column(String)
+    fastest_lap_driver = Column(String)
     
-    # Subjective results (calculated from performance analysis)
-    breakout_drivers = Column(String)  # JSON array of top 5
-    bust_drivers = Column(String)  # JSON array of bottom 5
-    breakout_teams = Column(String)  # JSON array
-    bust_teams = Column(String)  # JSON array
-    
-    # Raw performance data
-    performance_data = Column(String)  # JSON of full performance analysis
+    # Breakout/bust analysis results (from your performance analyzer)
+    breakout_drivers = Column(String)  # JSON list
+    breakout_teams = Column(String)  # JSON list
+    bust_drivers = Column(String)  # JSON list
+    bust_teams = Column(String)  # JSON list
     
     processed_at = Column(DateTime, default=datetime.utcnow)
     

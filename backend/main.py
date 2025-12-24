@@ -6,6 +6,7 @@ FastAPI server for F1 prediction game
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api import races, predictions, users, grids
+from database.connection import init_db
 
 app = FastAPI(
     title="Gridcall API",
@@ -21,6 +22,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    init_db()
 
 # Include routers
 app.include_router(races.router, prefix="/api/races", tags=["races"])

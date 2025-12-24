@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Gridcall",
-  description: "Prove you know the grid",
+  description: "Prove you know the grid - F1 Prediction Game",
 };
 
 export default function RootLayout({
