@@ -47,20 +47,22 @@ Players may go **Full Send** on one prediction. If correct, double points are aw
 
 ## Subjective scoring methodology..
 
-Rather than declaring whether a driver or team definitively “was” a Breakout or Bust, the system estimates how likely it is that a reasonable F1 fan would perceive that performance as a big surprise / flop. 
+Rather than declaring whether a driver or team definitively "was" a Breakout or Bust, the system calculates a performance score that captures how well someone did relative to expectations.
 
-To do this, the model would combine multiple objective signals, including:
-- Finishing position relative to car competitiveness
-- Qualifying delta vs. teammate
-- Grid-to-finish position movement
+The score combines multiple signals:
+- **Qualifying position** — with emphasis on making Q3 (P1-P10)
+- **Race finish** — absolute position matters
+- **Positions gained** — overtaking gets rewarded
+- **Teammate battles** — beating your teammate in quali and race
+- **Team competitiveness** — performance is weighted against where the car should be
 
-These signals are treated as inputs to a probabilistic model that outputs a likelihood score. 
+Each component is weighted to reflect what actually matters in F1. Making Q3 is huge. Finishing ahead of your teammate is huge. Gaining positions in the race is impressive.
 
-Drivers and teams are then ranked by these probabilities, with the top-ranked entries classified as Breakouts and the lowest-ranked as Busts. 
+Drivers are then ranked by their total weekend score. Top 5 = Breakouts. Bottom 5 = Busts.
 
-This should reasonably preserve subjectivity by modeling consensus perception rather than enforcing deterministic criteria.
+The system doesn't try to be perfectly "objective" — it's modeling what fans would naturally see as a standout weekend vs. a disappointing one. The math just makes it consistent and scalable.
  
-The system is designed from the ground up to maintain the user's trust!
+The system is designed from the ground up to maintain the user's trust.
 
 ---
 

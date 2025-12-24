@@ -8,9 +8,10 @@ import os
 import pandas as pd
 import logging
 from datetime import datetime
+
 from data_fetcher import F1DataFetcher, TeammateBattleFetcher
 
-# Suppress FastF1 logging
+# Suppress FastF1 logging for cleaner Terminal output
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 
 if not DEBUG:
