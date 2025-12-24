@@ -9,7 +9,8 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from database.connection import get_db
-from models.database import Prediction, Race
+from models.database import Prediction, Race, User
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -54,7 +55,7 @@ class PredictionResponse(BaseModel):
 @router.post("/", response_model=PredictionResponse)
 async def submit_prediction(
     prediction: PredictionCreate,
-    user_id: int,  # TODO: Get from auth token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Submit predictions for a race"""
@@ -69,16 +70,16 @@ async def submit_prediction(
     
     # Check if user already has predictions for this race
     existing = db.query(Prediction).filter(
-        Prediction.user_id == user_id,
+        Prediction.user_id == current_user.id, 
         Prediction.race_id == prediction.race_id
     ).first()
     
     if existing:
-        raise HTTPException(status_code=400, detail="Predictions already submitted. Use update endpoint to modify chaser.")
+        raise HTTPException(status_code=400, detail="Predictions already submitted. Use update endpoint to modify.")
     
     # Create prediction
     db_prediction = Prediction(
-        user_id=user_id,
+        user_id=current_user.id,
         **prediction.dict()
     )
     db.add(db_prediction)
@@ -91,7 +92,7 @@ async def submit_prediction(
 async def update_chaser(
     prediction_id: int,
     update: PredictionUpdate,
-    user_id: int,  # TODO: Get from auth token
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update chaser prediction (allowed until race start)"""
@@ -100,7 +101,7 @@ async def update_chaser(
     if not prediction:
         raise HTTPException(status_code=404, detail="Prediction not found")
     
-    if prediction.user_id != user_id:
+    if prediction.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Check if race has started
@@ -114,16 +115,54 @@ async def update_chaser(
     
     return prediction
 
-@router.get("/user/{user_id}/race/{race_id}", response_model=PredictionResponse)
-async def get_user_prediction(
-    user_id: int,
-    race_id: int,
+@router.put("/{prediction_id}", response_model=PredictionResponse)
+async def update_prediction(
+    prediction_id: int,
+    update: PredictionCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user's predictions for a specific race"""
+    """Update an existing prediction (allowed until predictions close)"""
+    
+    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    
+    if prediction.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Check if predictions are still open
+    race = db.query(Race).filter(Race.id == prediction.race_id).first()
+    if datetime.utcnow() > race.predictions_close:
+        raise HTTPException(status_code=400, detail="Predictions are closed for this race")
+    
+    # Update all fields
+    prediction.pole_driver = update.pole_driver
+    prediction.podium_p1 = update.podium_p1
+    prediction.podium_p2 = update.podium_p2
+    prediction.podium_p3 = update.podium_p3
+    prediction.chaser_driver = update.chaser_driver
+    prediction.breakout_type = update.breakout_type
+    prediction.breakout_name = update.breakout_name
+    prediction.bust_type = update.bust_type
+    prediction.bust_name = update.bust_name
+    prediction.full_send_category = update.full_send_category
+    
+    db.commit()
+    db.refresh(prediction)
+    
+    return prediction
+
+@router.get("/user/me/race/{race_id}", response_model=PredictionResponse)
+async def get_my_prediction(
+    race_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current user's predictions for a specific race"""
     
     prediction = db.query(Prediction).filter(
-        Prediction.user_id == user_id,
+        Prediction.user_id == current_user.id,
         Prediction.race_id == race_id
     ).first()
     
