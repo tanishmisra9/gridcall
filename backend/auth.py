@@ -1,9 +1,12 @@
 """
 Authentication utilities for JWT tokens and password hashing
+JWT means JSON Web Token
 """
 
+import os
 from datetime import datetime, timedelta
 from typing import Optional
+from dotenv import load_dotenv
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -13,10 +16,13 @@ from sqlalchemy.orm import Session
 from database.connection import get_db
 from models.database import User
 
-# Secret key for JWT - In production, use environment variable
-SECRET_KEY = "your-secret-key-change-this-in-production"
+# Load environment variables from .env file
+load_dotenv()
+
+# Secret key for JWT
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-fallback-key-DO-NOT-USE-IN-PRODUCTION")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # Default: 7 days
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

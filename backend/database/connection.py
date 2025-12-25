@@ -2,12 +2,16 @@
 Database configuration and session management
 """
 
+import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.database import Base
-import os
 
-# Database URL - using SQLite for development
+# Load environment variables
+load_dotenv()
+
+# Database URL - using SQLite for development, loaded from .env
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./gridcall.db")
 
 # Create engine
