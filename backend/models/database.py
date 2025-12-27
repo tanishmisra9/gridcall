@@ -2,19 +2,17 @@
 Database models for Gridcall
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey, Table
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
+from database.connection import Base
 
-Base = declarative_base()
-
-# Many-to-many relationship table for users and grids
+# Association table for Grid membership (many-to-many)
 grid_members = Table(
     'grid_members',
     Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id')),
-    Column('grid_id', Integer, ForeignKey('grids.id'))
+    Column('grid_id', Integer, ForeignKey('grids.id')),
+    Column('user_id', Integer, ForeignKey('users.id'))
 )
 
 
@@ -30,19 +28,7 @@ class User(Base):
     # Relationships
     predictions = relationship("Prediction", back_populates="user")
     grids = relationship("Grid", secondary=grid_members, back_populates="members")
-
-
-class Grid(Base):
-    __tablename__ = "grids"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    invite_code = Column(String, unique=True, index=True)
-    created_by = Column(Integer, ForeignKey('users.id'))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    members = relationship("User", secondary=grid_members, back_populates="grids")
+    created_grids = relationship("Grid", back_populates="creator", foreign_keys="Grid.created_by")
 
 
 class Race(Base):
@@ -53,13 +39,12 @@ class Race(Base):
     round_number = Column(Integer, nullable=False)
     location = Column(String, nullable=False)
     race_date = Column(DateTime, nullable=False)
-    predictions_close = Column(DateTime, nullable=False)  # When predictions lock
     completed = Column(Boolean, default=False)
     results_processed = Column(Boolean, default=False)
     
     # Relationships
     predictions = relationship("Prediction", back_populates="race")
-    results = relationship("RaceResult", back_populates="race")
+    results = relationship("RaceResult", back_populates="race", uselist=False)
 
 
 class Prediction(Base):
@@ -69,30 +54,42 @@ class Prediction(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     race_id = Column(Integer, ForeignKey('races.id'), nullable=False)
     
-    # Objective predictions
-    pole_driver = Column(String)  # Driver abbreviation
+    # Prediction fields
+    pole_driver = Column(String)
     podium_p1 = Column(String)
     podium_p2 = Column(String)
     podium_p3 = Column(String)
-    chaser_driver = Column(String)  # Editable until race start
-    
-    # Subjective predictions
+    chaser_driver = Column(String)
     breakout_type = Column(String)  # 'driver' or 'team'
-    breakout_name = Column(String)  # Abbreviation or team name
-    bust_type = Column(String)  # 'driver' or 'team'
+    breakout_name = Column(String)
+    bust_type = Column(String)      # 'driver' or 'team'
     bust_name = Column(String)
-    
-    # Full Send feature
-    full_send_category = Column(String)  # Which category to double points
+    full_send_category = Column(String, nullable=True)  # Category to double points
     
     # Scoring
-    points_earned = Column(Float, default=0)
+    points_earned = Column(Float, default=0.0)
     scored = Column(Boolean, default=False)
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="predictions")
     race = relationship("Race", back_populates="predictions")
+
+
+class Grid(Base):
+    __tablename__ = "grids"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    invite_code = Column(String, unique=True, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    members = relationship("User", secondary=grid_members, back_populates="grids")
+    creator = relationship("User", back_populates="created_grids", foreign_keys=[created_by])
 
 
 class RaceResult(Base):
@@ -101,18 +98,19 @@ class RaceResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     race_id = Column(Integer, ForeignKey('races.id'), nullable=False)
     
-    # Actual results
+    # Objective results
     pole_driver = Column(String)
     podium_p1 = Column(String)
     podium_p2 = Column(String)
     podium_p3 = Column(String)
-    fastest_lap_driver = Column(String)
+    chaser_driver = Column(String)
+    chaser_positions_gained = Column(Integer)  # ADDED THIS FIELD
     
-    # Breakout/bust analysis results (from your performance analyzer)
+    # Subjective results (from performance analyzer)
     breakout_drivers = Column(String)  # JSON list
-    breakout_teams = Column(String)  # JSON list
-    bust_drivers = Column(String)  # JSON list
-    bust_teams = Column(String)  # JSON list
+    breakout_teams = Column(String)    # JSON list
+    bust_drivers = Column(String)      # JSON list
+    bust_teams = Column(String)        # JSON list
     
     processed_at = Column(DateTime, default=datetime.utcnow)
     
